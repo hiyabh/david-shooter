@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>מצגת - משחק החלל</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #020818;
+    font-family: 'Heebo', Arial, sans-serif;
+    color: #fff;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Stars */
+  #starfield {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .slides-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 80px;
+    opacity: 0;
+    transform: translateX(80px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-80px);
+  }
+
+  /* Navigation */
+  #nav {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .nav-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 10px 28px;
+    border-radius: 50px;
+    font-size: 16px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s;
+    font-family: 'Heebo', Arial, sans-serif;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.18); border-color: #0af; color: #0af; }
+
+  .dots {
+    display: flex;
+    gap: 8px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .dot.active { background: #0af; width: 24px; border-radius: 4px; }
+
+  #slide-counter {
+    position: fixed;
+    top: 24px;
+    left: 40px;
+    z-index: 10;
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 2px;
+  }
+
+  /* Slide content components */
+  .tag {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #0af;
+    margin-bottom: 16px;
+    opacity: 0.8;
+  }
+
+  h1 {
+    font-size: clamp(42px, 6vw, 80px);
+    font-weight: 900;
+    line-height: 1.1;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  h2 {
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 900;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    font-size: clamp(16px, 2vw, 22px);
+    color: rgba(255,255,255,0.55);
+    text-align: center;
+    max-width: 700px;
+    line-height: 1.6;
+    margin-bottom: 40px;
+  }
+
+  .glow-text { color: #0af; text-shadow: 0 0 30px #0af8, 0 0 60px #0af4; }
+  .glow-orange { color: #f80; text-shadow: 0 0 30px #f808, 0 0 60px #f804; }
+  .glow-pink { color: #f0a; text-shadow: 0 0 30px #f0a8, 0 0 60px #f0a4; }
+
+  /* Cards */
+  .cards {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    max-width: 1000px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 28px 32px;
+    min-width: 220px;
+    max-width: 280px;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s;
+    text-align: center;
+  }
+  .card:hover {
+    background: rgba(0,170,255,0.08);
+    border-color: #0af4;
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0,170,255,0.15);
+  }
+
+  .card-icon {
+    font-size: 42px;
+    margin-bottom: 14px;
+    display: block;
+  }
+
+  .card h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #0af;
+  }
+
+  .card p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+  }
+
+  /* Timeline */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 700px;
+    width: 100%;
+  }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 16px 0;
+    position: relative;
+  }
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 19px;
+    top: 48px;
+    width: 2px;
+    height: calc(100% - 16px);
+    background: linear-gradient(to bottom, #0af4, transparent);
+  }
+
+  .step-num {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0af, #06f);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 16px;
+    flex-shrink: 0;
+    box-shadow: 0 0 20px #0af6;
+  }
+
+  .step-content h4 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step-content p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+  }
+
+  /* Code block */
+  .code-block {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(0,170,255,0.2);
+    border-radius: 14px;
+    padding: 24px 32px;
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    line-height: 1.8;
+    text-align: left;
+    direction: ltr;
+    max-width: 600px;
+    width: 100%;
+    color: #a8d8ff;
+  }
+  .code-block .kw { color: #f8a; }
+  .code-block .fn { color: #0df; }
+  .code-block .str { color: #afd; }
+  .code-block .cm { color: #666; }
+
+  /* Big stat */
+  .stats {
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat-num {
+    font-size: clamp(48px, 8vw, 96px);
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-label {
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+  }
+
+  /* Spaceship SVG demo */
+  .ship-demo {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 20px auto;
+  }
+
+  /* Feature list */
+  .feature-list {
+    list-style: none;
+    max-width: 600px;
+    width: 100%;
+  }
+  .feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 18px;
+  }
+  .feature-list li:last-child { border-bottom: none; }
+  .feature-list .check {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0af, #06f);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    box-shadow: 0 0 12px #0af5;
+  }
+
+  /* URL display */
+  .url-box {
+    background: rgba(0,170,255,0.08);
+    border: 1px solid rgba(0,170,255,0.3);
+    border-radius: 14px;
+    padding: 18px 36px;
+    font-size: 20px;
+    color: #0af;
+    letter-spacing: 1px;
+    margin-top: 12px;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.2s;
+  }
+  .url-box:hover {
+    background: rgba(0,170,255,0.16);
+    box-shadow: 0 0 30px rgba(0,170,255,0.2);
+  }
+
+  /* Animated rocket */
+  .rocket {
+    font-size: 80px;
+    animation: float 3s ease-in-out infinite;
+    display: block;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-45deg); }
+    50% { transform: translateY(-20px) rotate(-45deg); }
+  }
+
+  /* Two column */
+  .two-col {
+    display: flex;
+    gap: 60px;
+    align-items: center;
+    justify-content: center;
+    max-width: 1000px;
+  }
+  .col { flex: 1; }
+
+  /* Divider */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(to right, #0af, #f0a);
+    border-radius: 2px;
+    margin: 16px auto 32px;
+  }
+
+  /* Keyboard key */
+  kbd {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-bottom: 3px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 15px;
+    font-family: monospace;
+    color: #fff;
+    margin: 0 3px;
+  }
+
+  .keys-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 600px;
+    width: 100%;
+  }
+  .key-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 14px 18px;
+  }
+  .key-desc {
+    font-size: 15px;
+    color: rgba(255,255,255,0.7);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div id="slide-counter"></div>
+
+<div class="slides-container" id="slides">
+
+  <!-- Slide 1: Title -->
+  <div class="slide active" id="s1">
+    <div class="tag">פרויקט גיימינג · 2026</div>
+    <span class="rocket">🚀</span>
+    <h1><span class="glow-text">משחק החלל</span><br>של דוד ושירה</h1>
+    <p class="subtitle">משחק ירי בחלל בנוי מאפס עם HTML5 Canvas וג'אווהסקריפט טהור — ללא תלויות חיצוניות</p>
+    <div class="divider"></div>
+    <p style="font-size:14px;color:rgba(255,255,255,0.3);letter-spacing:3px">לחץ ← → לניווט</p>
+  </div>
+
+  <!-- Slide 2: Stats -->
+  <div class="slide" id="s2">
+    <div class="tag">במספרים</div>
+    <h2>מה בנינו?</h2>
+    <div class="divider"></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num glow-text">1</div>
+        <div class="stat-label">קובץ HTML</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num glow-orange">700+</div>
+        <div class="stat-label">שורות קוד</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num glow-pink">2</div>
+        <div class="stat-label">דמויות שחקן</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" style="color:#afd;text-shadow:0 0 30px #afd8">0</div>
+        <div class="stat-label">תלויות חיצוניות</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 3: Process -->
+  <div class="slide" id="s3">
+    <div class="tag">תהליך הפיתוח</div>
+    <h2>איך בנינו את זה?</h2>
+    <div class="divider"></div>
+    <div class="timeline">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>משחק בסיסי</h4>
+          <p>חללית יורה בכוכבים · רקע חלל · אנימציית פיצוץ · ניקוד וחיים</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>טיל על-קולי</h4>
+          <p>מנקה את כל המסך בבת אחת · גל הלם עם טבעות אנרגיה · מגבלת שימוש</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>HUD וחללית</h4>
+          <p>הוראות על המסך · ציור חללית עם קוקפיט · פרצוף הדמות בפנים</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>בחירת דמות ופרסום</h4>
+          <p>מסך בחירה בין דוד ושירה · העלאה ל-GitHub · פרסום GitHub Pages</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 4: Features -->
+  <div class="slide" id="s4">
+    <div class="tag">תכונות המשחק</div>
+    <h2>מה יש במשחק?</h2>
+    <div class="divider"></div>
+    <ul class="feature-list">
+      <li><span class="check">✓</span> מסך בחירת דמות אינטראקטיבי (דוד / שירה)</li>
+      <li><span class="check">✓</span> חללית עם קוקפיט — פרצוף אמיתי בתוך הספינה</li>
+      <li><span class="check">✓</span> כוכבים עם פיצוץ חלקיקים צבעוני</li>
+      <li><span class="check">✓</span> טיל על-קולי + גל הלם שמנקה הכל</li>
+      <li><span class="check">✓</span> שלבים עולים + בונוס טיל כל 200 ניקוד</li>
+      <li><span class="check">✓</span> רקע חלל עם כוכבים מהבהבים</li>
+    </ul>
+  </div>
+
+  <!-- Slide 5: Controls -->
+  <div class="slide" id="s5">
+    <div class="tag">שליטה במשחק</div>
+    <h2>כפתורי המשחק</h2>
+    <div class="divider"></div>
+    <div class="keys-grid">
+      <div class="key-row">
+        <span style="font-size:24px">🕹️</span>
+        <div>
+          <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd>
+          <div class="key-desc" style="margin-top:6px">תזוזה</div>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="font-size:24px">🔫</span>
+        <div>
+          <kbd>רווח</kbd>
+          <div class="key-desc" style="margin-top:6px">ירי רגיל</div>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="font-size:24px">💥</span>
+        <div>
+          <kbd style="color:#f80;border-color:#f80">X</kbd>
+          <div class="key-desc" style="margin-top:6px">טיל על-קולי!</div>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="font-size:24px">🔄</span>
+        <div>
+          <kbd>R</kbd>
+          <div class="key-desc" style="margin-top:6px">חזרה לתפריט</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 6: Tech -->
+  <div class="slide" id="s6">
+    <div class="tag">טכנולוגיה</div>
+    <h2>איך זה עובד?</h2>
+    <div class="divider"></div>
+    <div class="two-col">
+      <div class="col">
+        <div class="code-block">
+<span class="kw">function</span> <span class="fn">drawSpaceship</span>(x, y, img) {<br>
+&nbsp;&nbsp;<span class="cm">// hull + wings</span><br>
+&nbsp;&nbsp;ctx.<span class="fn">beginPath</span>();<br>
+&nbsp;&nbsp;ctx.<span class="fn">moveTo</span>(0, -hh);<br>
+&nbsp;&nbsp;<span class="cm">// cockpit with face</span><br>
+&nbsp;&nbsp;ctx.<span class="fn">clip</span>();<br>
+&nbsp;&nbsp;ctx.<span class="fn">drawImage</span>(img, ...);<br>
+}
+        </div>
+      </div>
+      <div class="col">
+        <div class="cards" style="flex-direction:column;gap:16px">
+          <div class="card" style="max-width:100%;text-align:right;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">🎨</span>
+            <div><h3 style="text-align:right">HTML5 Canvas</h3><p>ציור 2D מלא ב-60fps</p></div>
+          </div>
+          <div class="card" style="max-width:100%;text-align:right;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">⚡</span>
+            <div><h3 style="text-align:right">Vanilla JS</h3><p>ללא React / ללא libs</p></div>
+          </div>
+          <div class="card" style="max-width:100%;text-align:right;display:flex;align-items:center;gap:16px">
+            <span style="font-size:32px">🐱</span>
+            <div><h3 style="text-align:right">GitHub Pages</h3><p>פרסום חינמי ומיידי</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 7: Play now -->
+  <div class="slide" id="s7">
+    <div class="tag">שחק עכשיו</div>
+    <h1>המשחק חי! 🎮</h1>
+    <p class="subtitle">המשחק זמין לשחייה חינמית דרך GitHub Pages — פתוח לכולם, בכל מכשיר</p>
+    <a class="url-box" href="https://hiyabh.github.io/david-shooter/game.html" target="_blank">
+      hiyabh.github.io/david-shooter/game.html
+    </a>
+    <br><br>
+    <a class="url-box" style="font-size:15px;color:rgba(255,255,255,0.5);border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.03)" href="https://github.com/hiyabh/david-shooter" target="_blank">
+      github.com/hiyabh/david-shooter
+    </a>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div id="nav">
+  <button class="nav-btn" id="prevBtn">→ הקודם</button>
+  <div class="dots" id="dots"></div>
+  <button class="nav-btn" id="nextBtn">הבא ←</button>
+</div>
+
+<script>
+// Starfield
+const canvas = document.getElementById('starfield');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const stars = Array.from({length: 180}, () => ({
+  x: Math.random() * canvas.width,
+  y: Math.random() * canvas.height,
+  r: Math.random() * 1.4 + 0.2,
+  speed: Math.random() * 0.3 + 0.05,
+  b: Math.random()
+}));
+
+function animateStars() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  stars.forEach(s => {
+    s.y += s.speed;
+    if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
+    const a = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() * 0.001 + s.b * 10));
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.fill();
+  });
+  requestAnimationFrame(animateStars);
+}
+animateStars();
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
+// Slides
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+let current = 0;
+
+const dotsEl = document.getElementById('dots');
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.addEventListener('click', () => goTo(i));
+  dotsEl.appendChild(d);
+});
+
+function goTo(n) {
+  slides[current].classList.remove('active');
+  slides[current].classList.add('exit');
+  setTimeout(() => slides[current - 0].classList.remove('exit'), 500);
+
+  current = (n + total) % total;
+  slides[current].classList.add('active');
+
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+  document.getElementById('slide-counter').textContent = (current + 1) + ' / ' + total;
+}
+
+document.getElementById('nextBtn').addEventListener('click', () => goTo(current + 1));
+document.getElementById('prevBtn').addEventListener('click', () => goTo(current - 1));
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') goTo(current + 1);
+  if (e.key === 'ArrowRight') goTo(current - 1);
+});
+
+document.getElementById('slide-counter').textContent = '1 / ' + total;
+</script>
+</body>
+</html>
