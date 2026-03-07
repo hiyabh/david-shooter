@@ -140,6 +140,61 @@
   </div>
 
 <script>
+// ---- Sound system (Web Audio API, no files needed) ----
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+}
+
+function playTone(freq, dur, type, vol, slide) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'square';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  if (slide) osc.frequency.exponentialRampToValueAtTime(slide, audioCtx.currentTime + dur);
+  gain.gain.setValueAtTime(vol || 0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+
+function playNoise(dur, vol) {
+  if (!audioCtx) return;
+  const bufSize = audioCtx.sampleRate * dur;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol || 0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.setValueAtTime(3000, audioCtx.currentTime);
+  filt.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + dur);
+  src.connect(filt);
+  filt.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start();
+}
+
+const SFX = {
+  shoot()     { playTone(880, 0.08, 'square', 0.06, 1400); },
+  hit()       { playNoise(0.15, 0.1); playTone(200, 0.15, 'sawtooth', 0.06, 80); },
+  missile()   { playTone(200, 0.4, 'sawtooth', 0.08, 800); },
+  shockwave() { playNoise(0.6, 0.15); playTone(80, 0.5, 'sine', 0.12, 30); },
+  damage()    { playNoise(0.25, 0.12); playTone(150, 0.3, 'square', 0.08, 50); },
+  gameOver()  { playTone(400, 0.15, 'square', 0.1, 200); setTimeout(() => playTone(300, 0.15, 'square', 0.1, 150), 180); setTimeout(() => playTone(200, 0.4, 'sawtooth', 0.1, 80), 360); },
+  select()    { playTone(600, 0.08, 'sine', 0.08, 900); setTimeout(() => playTone(900, 0.12, 'sine', 0.08, 1200), 100); },
+  bonus()     { playTone(600, 0.1, 'sine', 0.08, 800); setTimeout(() => playTone(800, 0.1, 'sine', 0.08, 1000), 100); setTimeout(() => playTone(1000, 0.15, 'sine', 0.08, 1200), 200); },
+};
+
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -326,6 +381,8 @@ canvas.addEventListener('click', e => {
 // ---- Game functions ----
 
 function startGame(charIndex) {
+  initAudio();
+  SFX.select();
   selectedChar = characters[charIndex];
   phase = 'playing';
   resetGameState();
@@ -379,10 +436,12 @@ function fireMissile() {
   missileCount--;
   document.getElementById('missiles').textContent = missileCount;
   missiles.push({ x: player.x, y: player.y - player.h / 2, speed: S(14), trail: [] });
+  SFX.missile();
 }
 
 function triggerShockwave(x, y) {
   shockwave = { x, y, r: 0, maxR: Math.max(W, H) * 0.85, life: 1 };
+  SFX.shockwave();
   const gained = enemies.length * 10;
   enemies.forEach(e => createExplosion(e.x, e.y, e.color));
   enemies = [];
@@ -398,6 +457,7 @@ function checkMissileBonus() {
     lastMissileBonus = milestone;
     missileCount++;
     document.getElementById('missiles').textContent = missileCount;
+    SFX.bonus();
     explosions.push({ particles: [], tx: W/2, ty: H/2 - S(30), tlife: 2.0, bonusText: '🚀 +טיל!' });
   }
 }
@@ -430,6 +490,7 @@ function update() {
   if ((keys['Space'] || touchFire) && player.shootCooldown <= 0) {
     const c = selectedChar.bulletColor;
     bullets.push({ x: player.x, y: player.y - player.h/2, w: S(6), h: S(18), speed: S(10), color: c });
+    SFX.shoot();
     player.shootCooldown = 12;
   }
   if (player.shootCooldown > 0) player.shootCooldown--;
@@ -469,6 +530,7 @@ function update() {
       const dx = b.x - e.x, dy = b.y - e.y;
       if (Math.sqrt(dx*dx + dy*dy) < e.r) {
         createExplosion(e.x, e.y, e.color);
+        SFX.hit();
         score += 10;
         level = Math.floor(score / 100) + 1;
         hitBullets.add(bi);
@@ -485,8 +547,9 @@ function update() {
     const dx = e.x - player.x, dy = e.y - player.y;
     if (Math.sqrt(dx*dx + dy*dy) < e.r + S(28)) {
       createExplosion(e.x, e.y, e.color);
+      SFX.damage();
       lives--;
-      if (lives <= 0) { gameOver = true; phase = 'gameover'; }
+      if (lives <= 0) { gameOver = true; phase = 'gameover'; SFX.gameOver(); }
       return false;
     }
     return true;
