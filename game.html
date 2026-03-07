@@ -708,9 +708,16 @@ function loop() {
   else drawGame();
 }
 
-// Wait for both images
+// Wait for both images — ensure loop starts only once
 let loaded = 0;
-function onImgLoad() { if (++loaded >= 2) loop(); }
+let started = false;
+function onImgLoad() {
+  loaded++;
+  if (loaded >= 2 && !started) {
+    started = true;
+    loop();
+  }
+}
 imgDavid.onload = onImgLoad;
 imgShira.onload = onImgLoad;
 if (imgDavid.complete) onImgLoad();
