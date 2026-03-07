@@ -2,56 +2,180 @@
 <html lang="he">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>חללית בחלל!</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    html, body {
       background: #000;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
     }
     #ui {
       color: #fff;
-      font-size: 22px;
-      margin-bottom: 8px;
-      margin-top: 16px;
-      letter-spacing: 2px;
+      font-size: min(4vw, 22px);
+      margin-bottom: 4px;
+      margin-top: 8px;
+      letter-spacing: 1px;
       text-shadow: 0 0 10px #0af;
+      text-align: center;
     }
     canvas {
       border: 2px solid #0af;
-      box-shadow: 0 0 30px #0af8;
+      box-shadow: 0 0 20px #0af8;
       border-radius: 8px;
+      display: block;
     }
     #info {
       color: #888;
-      font-size: 13px;
-      margin-top: 8px;
+      font-size: min(2.5vw, 13px);
+      margin-top: 4px;
+      text-align: center;
+    }
+    /* Mobile touch controls */
+    #touch-controls {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 160px;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .touch-btn {
+      position: absolute;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      pointer-events: all;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #joystick-zone {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      width: 140px;
+      height: 140px;
+      pointer-events: all;
+    }
+    #joystick-base {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 2px solid rgba(255,255,255,0.15);
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+    }
+    #joystick-knob {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(0,170,255,0.3);
+      border: 2px solid rgba(0,170,255,0.5);
+      position: absolute;
+      left: 45px;
+      bottom: 45px;
+      transition: none;
+    }
+    #btn-fire {
+      right: 20px;
+      bottom: 55px;
+      width: 72px;
+      height: 72px;
+      background: rgba(0,255,255,0.12);
+      border: 2px solid rgba(0,255,255,0.4);
+      color: #0ff;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    #btn-fire:active { background: rgba(0,255,255,0.35); }
+    #btn-missile {
+      right: 100px;
+      bottom: 80px;
+      width: 56px;
+      height: 56px;
+      background: rgba(255,136,0,0.12);
+      border: 2px solid rgba(255,136,0,0.4);
+      color: #f80;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    #btn-missile:active { background: rgba(255,136,0,0.35); }
+
+    @media (pointer: coarse), (max-width: 768px) {
+      #touch-controls { display: block; }
+      #info { display: none; }
+      #ui { font-size: min(3.8vw, 18px); }
     }
   </style>
 </head>
 <body>
   <div id="ui">⭐ ניקוד: <span id="score">0</span> &nbsp;|&nbsp; חיים: <span id="lives">3</span> &nbsp;|&nbsp; 🚀 טילים: <span id="missiles">3</span></div>
-  <canvas id="c" width="600" height="700"></canvas>
+  <canvas id="c"></canvas>
   <div id="info">חצים / WASD להזזה &nbsp;|&nbsp; רווח לירות &nbsp;|&nbsp; <b style="color:#f80">X</b> = טיל על-קולי!</div>
+
+  <div id="touch-controls">
+    <div id="joystick-zone">
+      <div id="joystick-base"></div>
+      <div id="joystick-knob"></div>
+    </div>
+    <div class="touch-btn" id="btn-fire">ירי</div>
+    <div class="touch-btn" id="btn-missile">🚀</div>
+  </div>
 
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
+
+// Responsive canvas sizing
+let W, H;
+function resizeCanvas() {
+  const maxW = window.innerWidth - 4;
+  const maxH = window.innerHeight - 80;
+  const ratio = 600 / 700;
+  let w = maxW;
+  let h = w / ratio;
+  if (h > maxH) { h = maxH; w = h * ratio; }
+  w = Math.floor(w);
+  h = Math.floor(h);
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  W = w;
+  H = h;
+  // Rescale player position within bounds
+  if (player) {
+    player.x = Math.min(Math.max(player.x, player.w/2), W - player.w/2);
+    player.y = Math.min(Math.max(player.y, player.h/2), H - player.h/2);
+  }
+  // Rescale bg stars
+  bgStars.forEach(s => { s.x = Math.random() * W; s.y = Math.random() * H; });
+}
 
 // Load images
 const imgDavid = new Image(); imgDavid.src = 'דוד.png';
 const imgShira = new Image(); imgShira.src = 'שירה.png';
 
-// Game phases: 'select' | 'playing' | 'gameover'
+// Game phases
 let phase = 'select';
-let selectedChar = null; // {img, name, color}
+let selectedChar = null;
 let hoveredCard = null;
 
 const characters = [
@@ -60,39 +184,30 @@ const characters = [
 ];
 
 // Game state
-let score = 0;
-let lives = 3;
-let gameOver = false;
-let level = 1;
-let lastMissileBonus = 0;
+let score = 0, lives = 3, gameOver = false, level = 1, lastMissileBonus = 0;
 
 // Stars background
 const bgStars = Array.from({length: 120}, () => ({
-  x: Math.random() * W,
-  y: Math.random() * H,
+  x: 0, y: 0,
   r: Math.random() * 1.5 + 0.3,
   speed: Math.random() * 0.5 + 0.1,
   brightness: Math.random()
 }));
 
 // Player
-const player = {
-  x: W / 2, y: H - 110,
-  w: 80, h: 80,
-  speed: 5,
-  shootCooldown: 0
-};
+const player = { x: 0, y: 0, w: 70, h: 70, speed: 5, shootCooldown: 0 };
 
-let bullets = [];
-let enemies = [];
-let enemyTimer = 0;
-let enemyInterval = 90;
-let explosions = [];
-let missiles = [];
-let missileCount = 3;
-let shockwave = null;
+let bullets = [], enemies = [], explosions = [], missiles = [];
+let enemyTimer = 0, enemyInterval = 90, missileCount = 3, shockwave = null;
 
-// Keys
+// Scale helper
+function S(v) { return v * (W / 600); }
+
+// Init canvas size
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); });
+
+// ---- Input: keyboard ----
 const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -104,26 +219,111 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// Mouse for selection screen
+// ---- Input: touch joystick ----
+let touchJoy = { active: false, dx: 0, dy: 0, id: null };
+let touchFire = false;
+
+const joyZone = document.getElementById('joystick-zone');
+const joyKnob = document.getElementById('joystick-knob');
+const joyBase = document.getElementById('joystick-base');
+
+joyZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchJoy.active = true;
+  touchJoy.id = t.identifier;
+  updateJoystick(t);
+}, { passive: false });
+
+joyZone.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchJoy.id) updateJoystick(t);
+  }
+}, { passive: false });
+
+joyZone.addEventListener('touchend', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchJoy.id) {
+      touchJoy.active = false;
+      touchJoy.dx = 0;
+      touchJoy.dy = 0;
+      joyKnob.style.left = '45px';
+      joyKnob.style.bottom = '45px';
+    }
+  }
+});
+
+function updateJoystick(touch) {
+  const rect = joyBase.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  let dx = touch.clientX - cx;
+  let dy = touch.clientY - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const maxR = 45;
+  if (dist > maxR) { dx = dx/dist*maxR; dy = dy/dist*maxR; }
+  touchJoy.dx = dx / maxR; // -1 to 1
+  touchJoy.dy = dy / maxR;
+  joyKnob.style.left = (45 + dx) + 'px';
+  joyKnob.style.bottom = (45 - dy) + 'px';
+}
+
+// Fire button
+const btnFire = document.getElementById('btn-fire');
+btnFire.addEventListener('touchstart', e => { e.preventDefault(); touchFire = true; }, { passive: false });
+btnFire.addEventListener('touchend', e => { touchFire = false; });
+
+// Missile button
+const btnMissile = document.getElementById('btn-missile');
+btnMissile.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (phase === 'playing' && missileCount > 0) fireMissile();
+}, { passive: false });
+
+// Touch for canvas (selection + game over)
+function getCanvasTouch(e) {
+  const t = e.changedTouches[0];
+  const rect = canvas.getBoundingClientRect();
+  return { x: (t.clientX - rect.left) * (W / rect.width), y: (t.clientY - rect.top) * (H / rect.height) };
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const p = getCanvasTouch(e);
+  if (phase === 'select') {
+    characters.forEach((_, i) => {
+      const cx = W / 2 - S(120) + i * S(240), cy = H / 2 + S(20);
+      if (p.x > cx - S(90) && p.x < cx + S(90) && p.y > cy - S(120) && p.y < cy + S(100)) startGame(i);
+    });
+  }
+  if (phase === 'gameover') resetGame();
+}, { passive: false });
+
+// Mouse for selection
 canvas.addEventListener('mousemove', e => {
   if (phase !== 'select') return;
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const mx = (e.clientX - rect.left) * (W / rect.width);
+  const my = (e.clientY - rect.top) * (H / rect.height);
   hoveredCard = null;
   characters.forEach((_, i) => {
-    const cx = W / 2 - 120 + i * 240, cy = H / 2 + 20;
-    if (mx > cx - 90 && mx < cx + 90 && my > cy - 120 && my < cy + 100) hoveredCard = i;
+    const cx = W / 2 - S(120) + i * S(240), cy = H / 2 + S(20);
+    if (mx > cx - S(90) && mx < cx + S(90) && my > cy - S(120) && my < cy + S(100)) hoveredCard = i;
   });
 });
 canvas.addEventListener('click', e => {
   if (phase !== 'select') return;
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const mx = (e.clientX - rect.left) * (W / rect.width);
+  const my = (e.clientY - rect.top) * (H / rect.height);
   characters.forEach((_, i) => {
-    const cx = W / 2 - 120 + i * 240, cy = H / 2 + 20;
-    if (mx > cx - 90 && mx < cx + 90 && my > cy - 120 && my < cy + 100) startGame(i);
+    const cx = W / 2 - S(120) + i * S(240), cy = H / 2 + S(20);
+    if (mx > cx - S(90) && mx < cx + S(90) && my > cy - S(120) && my < cy + S(100)) startGame(i);
   });
 });
+
+// ---- Game functions ----
 
 function startGame(charIndex) {
   selectedChar = characters[charIndex];
@@ -134,7 +334,8 @@ function startGame(charIndex) {
 function resetGameState() {
   score = 0; lives = 3; level = 1; missileCount = 3; lastMissileBonus = 0;
   bullets = []; enemies = []; explosions = []; missiles = []; shockwave = null;
-  player.x = W / 2; player.y = H - 110;
+  player.x = W / 2; player.y = H - S(110);
+  player.w = S(70); player.h = S(70); player.speed = S(5);
   enemyTimer = 0; enemyInterval = 90; gameOver = false;
   document.getElementById('score').textContent = '0';
   document.getElementById('lives').textContent = '❤️❤️❤️';
@@ -146,36 +347,30 @@ function resetGame() {
   hoveredCard = null;
 }
 
-// ---- Game logic ----
-
 function spawnEnemy() {
-  const size = Math.random() * 30 + 20;
+  const size = Math.random() * S(30) + S(20);
   enemies.push({
     x: Math.random() * (W - size * 2) + size,
     y: -size,
     r: size,
-    speed: Math.random() * 1.5 + 0.8 + level * 0.2,
+    speed: (Math.random() * 1.5 + 0.8 + level * 0.2) * (H / 700),
     angle: 0,
     spinSpeed: (Math.random() - 0.5) * 0.05,
-    color: randomStarColor(),
+    color: ['#FFD700','#FFA500','#FF6347','#FFE066','#FFF4A3','#FFFDE7'][Math.floor(Math.random()*6)],
     rays: Math.floor(Math.random() * 3) + 5
   });
 }
 
-function randomStarColor() {
-  return ['#FFD700','#FFA500','#FF6347','#FFE066','#FFF4A3','#FFFDE7'][Math.floor(Math.random()*6)];
-}
-
 function createExplosion(x, y, color) {
   const particles = [];
-  for (let i = 0; i < 22; i++) {
-    const angle = (Math.PI * 2 * i) / 22 + Math.random() * 0.3;
-    const spd = Math.random() * 4 + 1.5;
-    particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, life: 1, decay: Math.random()*0.04+0.02, r: Math.random()*5+2, color });
+  for (let i = 0; i < 18; i++) {
+    const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.3;
+    const spd = (Math.random() * 4 + 1.5) * (W / 600);
+    particles.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd, life: 1, decay: Math.random()*0.04+0.02, r: (Math.random()*5+2)*(W/600), color });
   }
-  for (let i = 0; i < 8; i++) {
-    const angle = (Math.PI * 2 * i) / 8;
-    particles.push({ x, y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, life: 1, decay: 0.07, r: 2, color: '#fff' });
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI * 2 * i) / 6;
+    particles.push({ x, y, vx: Math.cos(angle)*6*(W/600), vy: Math.sin(angle)*6*(W/600), life: 1, decay: 0.07, r: 2*(W/600), color: '#fff' });
   }
   explosions.push({ particles, tx: x, ty: y, tlife: 1 });
 }
@@ -183,7 +378,7 @@ function createExplosion(x, y, color) {
 function fireMissile() {
   missileCount--;
   document.getElementById('missiles').textContent = missileCount;
-  missiles.push({ x: player.x, y: player.y - player.h / 2, speed: 14, trail: [] });
+  missiles.push({ x: player.x, y: player.y - player.h / 2, speed: S(14), trail: [] });
 }
 
 function triggerShockwave(x, y) {
@@ -194,21 +389,20 @@ function triggerShockwave(x, y) {
   score += gained;
   level = Math.floor(score / 100) + 1;
   document.getElementById('score').textContent = score;
-  checkMissileBonus(gained);
+  checkMissileBonus();
 }
 
-function checkMissileBonus(gained) {
+function checkMissileBonus() {
   const milestone = Math.floor(score / 200);
   if (milestone > lastMissileBonus) {
     lastMissileBonus = milestone;
     missileCount++;
     document.getElementById('missiles').textContent = missileCount;
-    explosions.push({ particles: [], tx: W/2, ty: H/2 - 30, tlife: 2.0, bonusText: '🚀 +טיל!' });
+    explosions.push({ particles: [], tx: W/2, ty: H/2 - S(30), tlife: 2.0, bonusText: '🚀 +טיל!' });
   }
 }
 
 function update() {
-  // Scroll bg stars always
   bgStars.forEach(s => {
     s.y += s.speed;
     if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
@@ -216,14 +410,26 @@ function update() {
 
   if (phase !== 'playing' || gameOver) return;
 
-  if ((keys['ArrowLeft']||keys['KeyA']) && player.x - player.w/2 > 0) player.x -= player.speed;
-  if ((keys['ArrowRight']||keys['KeyD']) && player.x + player.w/2 < W) player.x += player.speed;
-  if ((keys['ArrowUp']||keys['KeyW']) && player.y - player.h/2 > 0) player.y -= player.speed;
-  if ((keys['ArrowDown']||keys['KeyS']) && player.y + player.h/2 < H) player.y += player.speed;
+  // Keyboard movement
+  const spd = player.speed;
+  if ((keys['ArrowLeft']||keys['KeyA']) && player.x - player.w/2 > 0) player.x -= spd;
+  if ((keys['ArrowRight']||keys['KeyD']) && player.x + player.w/2 < W) player.x += spd;
+  if ((keys['ArrowUp']||keys['KeyW']) && player.y - player.h/2 > 0) player.y -= spd;
+  if ((keys['ArrowDown']||keys['KeyS']) && player.y + player.h/2 < H) player.y += spd;
 
-  if (keys['Space'] && player.shootCooldown <= 0) {
+  // Touch joystick movement
+  if (touchJoy.active) {
+    const deadzone = 0.15;
+    if (Math.abs(touchJoy.dx) > deadzone) player.x += touchJoy.dx * spd * 1.3;
+    if (Math.abs(touchJoy.dy) > deadzone) player.y += touchJoy.dy * spd * 1.3;
+    player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+    player.y = Math.max(player.h/2, Math.min(H - player.h/2, player.y));
+  }
+
+  // Shoot (keyboard or touch)
+  if ((keys['Space'] || touchFire) && player.shootCooldown <= 0) {
     const c = selectedChar.bulletColor;
-    bullets.push({ x: player.x, y: player.y - player.h/2, w: 6, h: 18, speed: 10, color: c });
+    bullets.push({ x: player.x, y: player.y - player.h/2, w: S(6), h: S(18), speed: S(10), color: c });
     player.shootCooldown = 12;
   }
   if (player.shootCooldown > 0) player.shootCooldown--;
@@ -242,7 +448,7 @@ function update() {
   });
 
   if (shockwave) {
-    shockwave.r += 28;
+    shockwave.r += S(28);
     shockwave.life = 1 - shockwave.r / shockwave.maxR;
     if (shockwave.r >= shockwave.maxR) shockwave = null;
   }
@@ -256,8 +462,7 @@ function update() {
 
   enemies.forEach(e => { e.y += e.speed; e.angle += e.spinSpeed; });
 
-  const hitBullets = new Set();
-  const hitEnemies = new Set();
+  const hitBullets = new Set(), hitEnemies = new Set();
   bullets.forEach((b, bi) => {
     enemies.forEach((e, ei) => {
       if (hitBullets.has(bi) || hitEnemies.has(ei)) return;
@@ -268,7 +473,7 @@ function update() {
         level = Math.floor(score / 100) + 1;
         hitBullets.add(bi);
         hitEnemies.add(ei);
-        checkMissileBonus(10);
+        checkMissileBonus();
       }
     });
   });
@@ -278,7 +483,7 @@ function update() {
   enemies = enemies.filter(e => {
     if (e.y - e.r > H) return false;
     const dx = e.x - player.x, dy = e.y - player.y;
-    if (Math.sqrt(dx*dx + dy*dy) < e.r + 28) {
+    if (Math.sqrt(dx*dx + dy*dy) < e.r + S(28)) {
       createExplosion(e.x, e.y, e.color);
       lives--;
       if (lives <= 0) { gameOver = true; phase = 'gameover'; }
@@ -315,16 +520,15 @@ function drawBgStars() {
   });
 }
 
-function drawSpaceship(x, y, w, h, img, glowColor, thruster = true) {
+function drawSpaceship(x, y, w, h, img, glowColor, thruster) {
   const hw = w / 2, hh = h / 2;
   ctx.save();
   ctx.translate(x, y);
 
-  // Thruster flames
   if (thruster) {
     const t = Date.now();
     for (let i = -1; i <= 1; i += 2) {
-      const flameH = 18 + Math.sin(t * 0.02 + i) * 6;
+      const flameH = 18 * (w/70) + Math.sin(t * 0.02 + i) * 6 * (w/70);
       const fx = i * hw * 0.38, fy = hh * 0.72;
       const fg = ctx.createLinearGradient(fx, fy, fx, fy + flameH);
       fg.addColorStop(0, glowColor);
@@ -334,24 +538,22 @@ function drawSpaceship(x, y, w, h, img, glowColor, thruster = true) {
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 12;
       ctx.beginPath();
-      ctx.ellipse(fx, fy + flameH / 2, 5, flameH / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(fx, fy + flameH / 2, 5 * (w/70), flameH / 2, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Ship body (metallic grey hull)
   ctx.shadowColor = glowColor;
   ctx.shadowBlur = 18;
 
-  // Main hull
   ctx.beginPath();
-  ctx.moveTo(0, -hh);           // nose (top center)
-  ctx.lineTo(hw * 0.55, -hh * 0.1);  // upper right shoulder
-  ctx.lineTo(hw * 0.6, hh * 0.55);   // lower right body
-  ctx.lineTo(hw * 0.22, hh * 0.72);  // bottom right
-  ctx.lineTo(-hw * 0.22, hh * 0.72); // bottom left
-  ctx.lineTo(-hw * 0.6, hh * 0.55);  // lower left body
-  ctx.lineTo(-hw * 0.55, -hh * 0.1); // upper left shoulder
+  ctx.moveTo(0, -hh);
+  ctx.lineTo(hw * 0.55, -hh * 0.1);
+  ctx.lineTo(hw * 0.6, hh * 0.55);
+  ctx.lineTo(hw * 0.22, hh * 0.72);
+  ctx.lineTo(-hw * 0.22, hh * 0.72);
+  ctx.lineTo(-hw * 0.6, hh * 0.55);
+  ctx.lineTo(-hw * 0.55, -hh * 0.1);
   ctx.closePath();
   const hullGrad = ctx.createLinearGradient(-hw, -hh, hw, hh);
   hullGrad.addColorStop(0, '#3a4a6a');
@@ -363,45 +565,22 @@ function drawSpaceship(x, y, w, h, img, glowColor, thruster = true) {
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Left wing
+  // Wings
   ctx.beginPath();
-  ctx.moveTo(-hw * 0.55, -hh * 0.1);
-  ctx.lineTo(-hw, hh * 0.3);
-  ctx.lineTo(-hw * 0.85, hh * 0.7);
-  ctx.lineTo(-hw * 0.6, hh * 0.55);
+  ctx.moveTo(-hw*0.55, -hh*0.1); ctx.lineTo(-hw, hh*0.3); ctx.lineTo(-hw*0.85, hh*0.7); ctx.lineTo(-hw*0.6, hh*0.55);
   ctx.closePath();
-  const wingGradL = ctx.createLinearGradient(-hw, 0, -hw*0.5, 0);
-  wingGradL.addColorStop(0, '#0d1a30');
-  wingGradL.addColorStop(1, '#1e2a45');
-  ctx.fillStyle = wingGradL;
-  ctx.fill();
-  ctx.strokeStyle = glowColor + '66';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Right wing (mirror)
+  ctx.fillStyle = '#0d1a30'; ctx.fill(); ctx.strokeStyle = glowColor + '66'; ctx.lineWidth = 1; ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(hw * 0.55, -hh * 0.1);
-  ctx.lineTo(hw, hh * 0.3);
-  ctx.lineTo(hw * 0.85, hh * 0.7);
-  ctx.lineTo(hw * 0.6, hh * 0.55);
+  ctx.moveTo(hw*0.55, -hh*0.1); ctx.lineTo(hw, hh*0.3); ctx.lineTo(hw*0.85, hh*0.7); ctx.lineTo(hw*0.6, hh*0.55);
   ctx.closePath();
-  const wingGradR = ctx.createLinearGradient(hw*0.5, 0, hw, 0);
-  wingGradR.addColorStop(0, '#1e2a45');
-  wingGradR.addColorStop(1, '#0d1a30');
-  ctx.fillStyle = wingGradR;
-  ctx.fill();
-  ctx.strokeStyle = glowColor + '66';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.fillStyle = '#0d1a30'; ctx.fill(); ctx.strokeStyle = glowColor + '66'; ctx.stroke();
 
-  // Wing accent lines
-  ctx.strokeStyle = glowColor + '55';
-  ctx.lineWidth = 1;
+  // Wing accents
+  ctx.strokeStyle = glowColor + '55'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(-hw*0.6, hh*0.1); ctx.lineTo(-hw*0.9, hh*0.5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(hw*0.6, hh*0.1);  ctx.lineTo(hw*0.9, hh*0.5);  ctx.stroke();
 
-  // Cockpit window (oval) with face inside
+  // Cockpit
   const cockpitR = hw * 0.38;
   const cockpitY = -hh * 0.1;
   ctx.save();
@@ -413,35 +592,24 @@ function drawSpaceship(x, y, w, h, img, glowColor, thruster = true) {
   }
   ctx.restore();
 
-  // Cockpit rim
   ctx.beginPath();
   ctx.ellipse(0, cockpitY, cockpitR, cockpitR * 1.1, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = glowColor;
-  ctx.lineWidth = 2.5;
-  ctx.shadowColor = glowColor;
-  ctx.shadowBlur = 12;
+  ctx.strokeStyle = glowColor; ctx.lineWidth = 2.5;
+  ctx.shadowColor = glowColor; ctx.shadowBlur = 12;
   ctx.stroke();
 
-  // Nose tip glow
-  ctx.beginPath();
-  ctx.arc(0, -hh, 4, 0, Math.PI * 2);
-  ctx.fillStyle = glowColor;
-  ctx.shadowColor = glowColor;
-  ctx.shadowBlur = 16;
-  ctx.fill();
+  // Nose
+  ctx.beginPath(); ctx.arc(0, -hh, 4*(w/70), 0, Math.PI*2);
+  ctx.fillStyle = glowColor; ctx.shadowBlur = 16; ctx.fill();
 
-  // Engine pods (bottom)
+  // Engine pods
   [-1, 1].forEach(side => {
     ctx.beginPath();
     ctx.ellipse(side * hw * 0.38, hh * 0.65, hw * 0.12, hw * 0.18, 0, 0, Math.PI * 2);
     const epg = ctx.createRadialGradient(side*hw*0.38, hh*0.65, 0, side*hw*0.38, hh*0.65, hw*0.18);
-    epg.addColorStop(0, '#2a3a55');
-    epg.addColorStop(1, '#0d1520');
-    ctx.fillStyle = epg;
-    ctx.strokeStyle = glowColor + '88';
-    ctx.lineWidth = 1;
-    ctx.fill();
-    ctx.stroke();
+    epg.addColorStop(0, '#2a3a55'); epg.addColorStop(1, '#0d1520');
+    ctx.fillStyle = epg; ctx.strokeStyle = glowColor + '88'; ctx.lineWidth = 1;
+    ctx.fill(); ctx.stroke();
   });
 
   ctx.restore();
@@ -459,13 +627,9 @@ function drawStar(x, y, outerR, innerR, rays, color, angle) {
     else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
   }
   ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 18;
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 18;
   ctx.fill();
-  ctx.strokeStyle = '#fff8';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.strokeStyle = '#fff8'; ctx.lineWidth = 1; ctx.stroke();
   ctx.restore();
 }
 
@@ -474,54 +638,62 @@ function drawSelectionScreen() {
   ctx.fillRect(0, 0, W, H);
   drawBgStars();
 
-  // Title
   ctx.save();
   ctx.textAlign = 'center';
-  ctx.font = 'bold 42px Arial';
+  ctx.font = `bold ${S(38)}px Arial`;
   ctx.fillStyle = '#FFD700';
   ctx.shadowColor = '#FFD700';
   ctx.shadowBlur = 24;
-  ctx.fillText('🚀 בחר את החללית שלך!', W/2, 120);
-  ctx.font = '20px Arial';
+  ctx.fillText('🚀 בחר את החללית שלך!', W/2, S(120));
+  ctx.font = `${S(18)}px Arial`;
   ctx.fillStyle = '#aaa';
   ctx.shadowBlur = 0;
-  ctx.fillText('לחץ על דמות או הקש 1 / 2', W/2, 160);
+  const isMobile = ('ontouchstart' in window);
+  ctx.fillText(isMobile ? 'לחץ על דמות לבחירה' : 'לחץ על דמות או הקש 1 / 2', W/2, S(155));
   ctx.restore();
 
   characters.forEach((ch, i) => {
-    const cx = W / 2 - 120 + i * 240;
-    const cy = H / 2 + 20;
+    const cx = W / 2 - S(120) + i * S(240);
+    const cy = H / 2 + S(20);
     const hovered = hoveredCard === i;
 
-    // Card background
     ctx.save();
     ctx.beginPath();
-    ctx.roundRect(cx - 90, cy - 120, 180, 220, 16);
+    // Manual rounded rect for card
+    const rx = cx - S(90), ry = cy - S(120), rw = S(180), rh = S(220), rr = S(16);
+    ctx.moveTo(rx + rr, ry);
+    ctx.lineTo(rx + rw - rr, ry);
+    ctx.arcTo(rx + rw, ry, rx + rw, ry + rr, rr);
+    ctx.lineTo(rx + rw, ry + rh - rr);
+    ctx.arcTo(rx + rw, ry + rh, rx + rw - rr, ry + rh, rr);
+    ctx.lineTo(rx + rr, ry + rh);
+    ctx.arcTo(rx, ry + rh, rx, ry + rh - rr, rr);
+    ctx.lineTo(rx, ry + rr);
+    ctx.arcTo(rx, ry, rx + rr, ry, rr);
+    ctx.closePath();
     ctx.fillStyle = hovered ? `${ch.color}22` : '#0d1a2a';
     ctx.strokeStyle = hovered ? ch.color : ch.color + '55';
     ctx.lineWidth = hovered ? 2.5 : 1.5;
     ctx.shadowColor = ch.color;
     ctx.shadowBlur = hovered ? 20 : 6;
-    ctx.fill();
-    ctx.stroke();
+    ctx.fill(); ctx.stroke();
     ctx.restore();
 
-    // Mini spaceship preview
-    const previewScale = hovered ? 0.85 : 0.75;
-    drawSpaceship(cx, cy - 20, 100 * previewScale, 110 * previewScale, ch.img, ch.color, false);
+    const previewScale = (hovered ? 0.85 : 0.75) * (W / 600);
+    drawSpaceship(cx, cy - S(20), 100 * previewScale, 110 * previewScale, ch.img, ch.color, false);
 
-    // Name
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = `bold ${hovered ? 22 : 20}px Arial`;
+    ctx.font = `bold ${S(hovered ? 22 : 20)}px Arial`;
     ctx.fillStyle = ch.color;
     ctx.shadowColor = ch.color;
     ctx.shadowBlur = hovered ? 12 : 4;
-    ctx.fillText(ch.name, cx, cy + 90);
-    ctx.font = '14px Arial';
-    ctx.fillStyle = '#888';
-    ctx.shadowBlur = 0;
-    ctx.fillText(`לחץ ${i + 1}`, cx, cy + 112);
+    ctx.fillText(ch.name, cx, cy + S(90));
+    if (!isMobile) {
+      ctx.font = `${S(14)}px Arial`;
+      ctx.fillStyle = '#888'; ctx.shadowBlur = 0;
+      ctx.fillText(`לחץ ${i + 1}`, cx, cy + S(112));
+    }
     ctx.restore();
   });
 }
@@ -534,58 +706,39 @@ function drawGame() {
   // Bullets
   bullets.forEach(b => {
     ctx.save();
-    ctx.shadowColor = b.color;
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = b.color; ctx.shadowBlur = 12;
     const grad = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
     grad.addColorStop(0, b.color);
     grad.addColorStop(1, 'rgba(0,255,255,0.2)');
     ctx.fillStyle = grad;
-    // manual rounded rect (no roundRect API needed)
     const bx = b.x - b.w/2, by = b.y, bw = b.w, bh = b.h, br = 3;
     ctx.beginPath();
-    ctx.moveTo(bx + br, by);
-    ctx.lineTo(bx + bw - br, by);
-    ctx.arcTo(bx + bw, by, bx + bw, by + br, br);
-    ctx.lineTo(bx + bw, by + bh - br);
-    ctx.arcTo(bx + bw, by + bh, bx + bw - br, by + bh, br);
-    ctx.lineTo(bx + br, by + bh);
-    ctx.arcTo(bx, by + bh, bx, by + bh - br, br);
-    ctx.lineTo(bx, by + br);
-    ctx.arcTo(bx, by, bx + br, by, br);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    ctx.moveTo(bx+br,by); ctx.lineTo(bx+bw-br,by);
+    ctx.arcTo(bx+bw,by,bx+bw,by+br,br); ctx.lineTo(bx+bw,by+bh-br);
+    ctx.arcTo(bx+bw,by+bh,bx+bw-br,by+bh,br); ctx.lineTo(bx+br,by+bh);
+    ctx.arcTo(bx,by+bh,bx,by+bh-br,br); ctx.lineTo(bx,by+br);
+    ctx.arcTo(bx,by,bx+br,by,br);
+    ctx.closePath(); ctx.fill(); ctx.restore();
   });
 
   // Missiles
   missiles.forEach(m => {
     m.trail.forEach((t, i) => {
       const alpha = (i / m.trail.length) * 0.7;
-      const size = (i / m.trail.length) * 10;
+      const size = (i / m.trail.length) * S(10);
       if (size < 0.5) return;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
+      ctx.save(); ctx.globalAlpha = alpha;
+      ctx.beginPath(); ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
       const tGrad = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, size);
-      tGrad.addColorStop(0, '#fff');
-      tGrad.addColorStop(0.4, '#f80');
-      tGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = tGrad;
-      ctx.fill();
-      ctx.restore();
+      tGrad.addColorStop(0, '#fff'); tGrad.addColorStop(0.4, '#f80'); tGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = tGrad; ctx.fill(); ctx.restore();
     });
     ctx.save();
-    ctx.shadowColor = '#f80';
-    ctx.shadowBlur = 24;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y, 7, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#f80';
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y - 12, 5, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.shadowColor = '#f80'; ctx.shadowBlur = 24;
+    ctx.fillStyle = '#fff'; ctx.beginPath();
+    ctx.ellipse(m.x, m.y, S(7), S(18), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f80'; ctx.beginPath();
+    ctx.ellipse(m.x, m.y - S(12), S(5), S(8), 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   });
 
@@ -593,50 +746,36 @@ function drawGame() {
   if (shockwave) {
     ctx.save();
     ctx.globalAlpha = shockwave.life * 0.25;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(shockwave.x, shockwave.y, shockwave.r, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(shockwave.x, shockwave.y, shockwave.r, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(255,160,0,${shockwave.life * 0.9})`;
     ctx.lineWidth = 12 * shockwave.life;
-    ctx.shadowColor = '#f80';
-    ctx.shadowBlur = 30;
-    ctx.stroke();
+    ctx.shadowColor = '#f80'; ctx.shadowBlur = 30; ctx.stroke();
     if (shockwave.r > 30) {
-      ctx.beginPath();
-      ctx.arc(shockwave.x, shockwave.y, shockwave.r * 0.7, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(shockwave.x, shockwave.y, shockwave.r * 0.7, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255,220,80,${shockwave.life * 0.5})`;
-      ctx.lineWidth = 5 * shockwave.life;
-      ctx.stroke();
+      ctx.lineWidth = 5 * shockwave.life; ctx.stroke();
     }
     ctx.restore();
   }
 
-  // Enemy stars
   enemies.forEach(e => drawStar(e.x, e.y, e.r, e.r * 0.45, e.rays, e.color, e.angle));
 
   // Explosions
   explosions.forEach(exp => {
     exp.particles.forEach(p => {
-      ctx.save();
-      ctx.globalAlpha = p.life;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 8;
-      ctx.fill();
-      ctx.restore();
+      ctx.save(); ctx.globalAlpha = p.life;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+      ctx.fill(); ctx.restore();
     });
     if (exp.tlife > 0) {
-      ctx.save();
-      ctx.globalAlpha = Math.min(1, exp.tlife);
-      ctx.textAlign = 'center';
+      ctx.save(); ctx.globalAlpha = Math.min(1, exp.tlife); ctx.textAlign = 'center';
       if (exp.bonusText) {
-        ctx.fillStyle = '#f80'; ctx.font = 'bold 28px Arial'; ctx.shadowColor = '#f80';
+        ctx.fillStyle = '#f80'; ctx.font = `bold ${S(28)}px Arial`; ctx.shadowColor = '#f80';
       } else {
-        ctx.fillStyle = '#FFD700'; ctx.font = 'bold 20px Arial'; ctx.shadowColor = '#FFD700';
+        ctx.fillStyle = '#FFD700'; ctx.font = `bold ${S(20)}px Arial`; ctx.shadowColor = '#FFD700';
       }
       ctx.shadowBlur = 14;
       ctx.fillText(exp.bonusText || '+10', exp.tx, exp.ty);
@@ -644,72 +783,64 @@ function drawGame() {
     }
   });
 
-  // Player spaceship
+  // Player
   if (selectedChar) {
     drawSpaceship(player.x, player.y, player.w, player.h, selectedChar.img, selectedChar.color, true);
   }
 
   // HUD: Level
   ctx.save();
-  ctx.fillStyle = '#0af4';
-  ctx.font = 'bold 14px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText('שלב ' + level, 10, 20);
+  ctx.fillStyle = '#0af4'; ctx.font = `bold ${S(14)}px Arial`; ctx.textAlign = 'left';
+  ctx.fillText('שלב ' + level, S(10), S(20));
   ctx.restore();
 
-  // HUD: Instructions
-  ctx.save();
-  ctx.textAlign = 'right';
-  const instructions = [
-    { label: '↑↓←→ / WASD', desc: 'תזוזה' },
-    { label: 'רווח', desc: 'ירי' },
-    { label: 'X', desc: 'טיל על-קולי' },
-    { label: 'R', desc: 'חזרה לבחירה' },
-  ];
-  instructions.forEach((ins, i) => {
-    const y = 22 + i * 22;
-    ctx.font = 'bold 13px Arial';
-    ctx.fillStyle = '#f80';
-    ctx.shadowColor = '#f80';
-    ctx.shadowBlur = 6;
-    ctx.fillText(ins.label, W - 8, y);
-    ctx.font = '12px Arial';
-    ctx.fillStyle = '#aaa';
-    ctx.shadowBlur = 0;
-    ctx.fillText('= ' + ins.desc, W - 8 - ctx.measureText(ins.label).width - 4, y);
-  });
-  ctx.restore();
+  // HUD: Instructions (desktop only)
+  if (!('ontouchstart' in window)) {
+    ctx.save();
+    ctx.textAlign = 'right';
+    [
+      { label: '↑↓←→ / WASD', desc: 'תזוזה' },
+      { label: 'רווח', desc: 'ירי' },
+      { label: 'X', desc: 'טיל על-קולי' },
+      { label: 'R', desc: 'חזרה לבחירה' },
+    ].forEach((ins, i) => {
+      const y = S(22) + i * S(22);
+      ctx.font = `bold ${S(13)}px Arial`; ctx.fillStyle = '#f80';
+      ctx.shadowColor = '#f80'; ctx.shadowBlur = 6;
+      ctx.fillText(ins.label, W - S(8), y);
+      ctx.font = `${S(12)}px Arial`; ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
+      ctx.fillText('= ' + ins.desc, W - S(8) - ctx.measureText(ins.label).width - S(4), y);
+    });
+    ctx.restore();
+  }
 
-  // Game Over overlay
+  // Game Over
   if (phase === 'gameover') {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
-    ctx.font = 'bold 54px Arial';
-    ctx.fillStyle = '#FFD700';
-    ctx.shadowColor = '#FFD700';
-    ctx.shadowBlur = 30;
-    ctx.fillText('המשחק נגמר!', W/2, H/2 - 50);
-    ctx.font = '28px Arial';
-    ctx.fillStyle = '#fff';
-    ctx.shadowBlur = 0;
-    ctx.fillText('ניקוד: ' + score, W/2, H/2 + 10);
-    ctx.font = '20px Arial';
+    ctx.font = `bold ${S(48)}px Arial`;
+    ctx.fillStyle = '#FFD700'; ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 30;
+    ctx.fillText('המשחק נגמר!', W/2, H/2 - S(50));
+    ctx.font = `${S(26)}px Arial`;
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 0;
+    ctx.fillText('ניקוד: ' + score, W/2, H/2 + S(10));
+    ctx.font = `${S(18)}px Arial`;
     ctx.fillStyle = selectedChar ? selectedChar.color : '#0af';
-    ctx.fillText('לחץ R לבחירת דמות מחדש', W/2, H/2 + 60);
+    const isMobile = ('ontouchstart' in window);
+    ctx.fillText(isMobile ? 'לחץ על המסך להתחלה מחדש' : 'לחץ R לבחירת דמות מחדש', W/2, H/2 + S(55));
     ctx.restore();
   }
 }
 
 function loop() {
-  requestAnimationFrame(loop); // always schedule next frame first
+  requestAnimationFrame(loop);
   update();
   if (phase === 'select') drawSelectionScreen();
   else drawGame();
 }
 
-// Wait for both images — ensure loop starts only once
+// Wait for both images
 let loaded = 0;
 let started = false;
 function onImgLoad() {
