@@ -504,7 +504,7 @@ function update() {
     m.y -= m.speed;
   });
   missiles = missiles.filter(m => {
-    if (m.y < -10) { triggerShockwave(m.x, 0); return false; }
+    if (m.y < H * 0.35) { triggerShockwave(m.x, m.y); return false; }
     return true;
   });
 
